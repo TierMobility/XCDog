@@ -23,12 +23,14 @@ struct LogParser {
         
         let categorisation = parseBuildCategory(with: targets, steps: steps)
         let systemInfo = try HardwareFactsFetcherImplementation().fetch()
+        let xcodeVersion = XcodeFactsFetcher().fetch()
         
         return BuildMetrics(
             buildCategory: categorisation.buildCategory,
             isCI: isCI,
-            totalElapsedBuildTimeMs: Int(build.duration),
-            systemInfo: systemInfo
+            totalElapsedBuildTimeMs: Int(build.duration * 1000),
+            systemInfo: systemInfo,
+            xcodeVersion: xcodeVersion
         )
     }
     

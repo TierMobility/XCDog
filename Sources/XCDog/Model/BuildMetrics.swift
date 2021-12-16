@@ -5,6 +5,7 @@ struct BuildMetrics: Codable {
     var isCI: Bool
     var totalElapsedBuildTimeMs: Int
     var systemInfo: SystemInfo
+    var xcodeVersion: XcodeVersion?
 }
 
 struct SystemInfo: Codable {
@@ -36,4 +37,9 @@ struct BuildCategorisation {
     let buildCompiledCount: Int
     let targetsCategory: [String: BuildCategoryType]
     let targetsCompiledCount: [String: Int]
+}
+
+struct XcodeVersion: Codable {
+    var buildNumber: String
+    var version: String
 }
