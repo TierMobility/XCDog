@@ -7,7 +7,7 @@ struct LogParser {
         machineName: String,
         isCI: Bool
     ) throws -> BuildMetrics {
-        let activityLog = try ActivityParser().parseActivityLogInURL(url, redacted: true, withoutBuildSpecificInformation: true)
+        let activityLog = try ActivityParser().parseActivityLogInURL(url, redacted: false, withoutBuildSpecificInformation: false)
         let buildSteps = try ParserBuildSteps(machineName: machineName,
                                               omitWarningsDetails: false,
                                               omitNotesDetails: false,
@@ -16,35 +16,51 @@ struct LogParser {
             .parse(activityLog: activityLog)
             .flatten()
         
-        let build = buildSteps[0]
+        let buildInfo = buildSteps[0]
+        let buildIdentifier = buildInfo.identifier
         
-        let targets = buildSteps
+        let targetBuildSteps = buildSteps.filter { $0.type == .target }
+        let targets = targetBuildSteps.map { step in
+            return Target(buildStep: step)
+        }
         let steps = buildSteps.filter { $0.type == .detail && $0.detailStepType != .swiftAggregatedCompilation }
+
+        let detailsBuild = steps.filter { $0.detailStepType != .swiftCompilation }.map {
+            return Step(buildStep: $0,
+                        buildIdentifier: buildIdentifier,
+                        targetIdentifier: $0.parentIdentifier
+            )
+        }
+        let stepsBuild = detailsBuild + parseSwiftSteps(buildSteps: buildSteps, targets: targetBuildSteps, steps: steps, buildIdentifier: buildIdentifier)
         
-        let categorisation = parseBuildCategory(with: targets, steps: steps)
+        let buildCategorisation = parseBuildCategory(
+            with: targets,
+            steps: stepsBuild.filter { $0.type != "other" && $0.type != "scriptExecution" && $0.type != "copySwiftLibs" }
+        )
+
+        
         let systemInfo = try HardwareFactsFetcherImplementation().fetch()
         let xcodeVersion = XcodeFactsFetcher().fetch()
         
         return BuildMetrics(
-            buildCategory: categorisation.buildCategory,
+            buildCategory: buildCategorisation.buildCategory,
             isCI: isCI,
-            totalElapsedBuildTimeMs: Int(build.duration * 1000),
+            totalElapsedBuildTimeMs: Int(buildInfo.duration * 1000),
             systemInfo: systemInfo,
             xcodeVersion: xcodeVersion
         )
     }
     
-    private static func parseBuildCategory(with targets: [BuildStep], steps: [BuildStep]) -> BuildCategorisation {
+    private static func parseBuildCategory(with targets: [Target], steps: [Step]) -> BuildCategorisation {
         var targetsCompiledCount = [String: Int]()
-        
         // Initialize map with all targets identifiers.
         for target in targets {
-            targetsCompiledCount[target.identifier] = 0
+            targetsCompiledCount[target.id ?? ""] = 0
         }
         // Compute how many steps were not fetched from cache for each target.
         for step in steps {
             if !step.fetchedFromCache {
-                targetsCompiledCount[step.parentIdentifier, default: 0] += 1
+                targetsCompiledCount[step.targetIdentifier, default: 0] += 1
             }
         }
 
@@ -61,7 +77,7 @@ struct LogParser {
             // were built cleanly.
             switch filesCompiledCount {
             case 0: targetsCategory[target] = .noop
-            case steps.filter { $0.parentIdentifier == target }.count: targetsCategory[target] = .clean
+            case steps.filter { $0.targetIdentifier == target }.count: targetsCategory[target] = .clean
             default: targetsCategory[target] = .incremental
             }
         }
@@ -84,5 +100,41 @@ struct LogParser {
             targetsCategory: targetsCategory,
             targetsCompiledCount: targetsCompiledCount
         )
+    }
+    
+    private static func parseSwiftSteps(
+        buildSteps: [BuildStep],
+        targets: [BuildStep],
+        steps: [BuildStep],
+        buildIdentifier: String
+    ) -> [Step] {
+        let swiftAggregatedSteps = buildSteps.filter { $0.type == .detail
+            && $0.detailStepType == .swiftAggregatedCompilation }
+
+        let swiftAggregatedStepsIds = swiftAggregatedSteps.reduce([String: String]()) {
+            dictionary, step -> [String: String] in
+            return dictionary.merging(zip([step.identifier], [step.parentIdentifier])) { (_, new) in new }
+        }
+
+        let targetsIds = targets.reduce([String: String]()) {
+            dictionary, target -> [String: String] in
+            return dictionary.merging(zip([target.identifier], [target.identifier])) { (_, new) in new }
+        }
+
+        return steps
+            .filter { $0.detailStepType == .swiftCompilation }
+            .compactMap { step -> Step? in
+                var targetId = step.parentIdentifier
+                // A swift step can have either a target as a parent or a swiftAggregatedCompilation
+                if targetsIds[step.parentIdentifier] == nil {
+                    // If the parent is a swiftAggregatedCompilation we use the target id from that parent step
+                    guard let swiftTargetId = swiftAggregatedStepsIds[step.parentIdentifier] else {
+                        return nil
+                    }
+                    targetId = swiftTargetId
+                }
+                return Step(buildStep: step, buildIdentifier: buildIdentifier, targetIdentifier: targetId)
+
+        }
     }
 }
