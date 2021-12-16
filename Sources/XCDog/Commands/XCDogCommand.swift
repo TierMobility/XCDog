@@ -3,22 +3,22 @@ import Foundation
 import XCLogParser
 
 struct XCDogCommand: ParsableCommand {
-    @Argument(help: "DataDog API key")
+    @Option(name: [.customLong("dataDogApiKey")], help: "DataDog API key")
     var apiKey: String
     
-    @Argument(help: "DataDog application key")
+    @Option(name: [.customLong("dataDogAppKey")], help: "DataDog Application key")
     var applicationKey: String
     
-    @Argument(help: "Project name")
+    @Option(name: [.customLong("project"), .customShort("p")], help: "Project name")
     var projectName: String
     
     @Option(name: [.customLong("buildDir"), .customShort("b")], help: "The value of the Xcode $BUILD_DIR environment variable.")
     public var buildDir: String?
     
-    @Option(help: "Timeout")
-    var timeout: Int = 30
+    @Option(name: [.customLong("timeout"), .customShort("t")], help: "Timeout")
+    var timeout: Int = 10
     
-    @Flag(help: "Is running on CI")
+    @Flag(name: [.customLong("ci")], help: "Is running on CI")
     var isCI: Bool = false
     
     mutating func run() throws {
