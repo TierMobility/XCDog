@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "XCDog",
     platforms: [
-        .macOS(.v12),
+        .macOS(.v11),
     ],
     dependencies: [
         .package(url: "https://github.com/MobileNativeFoundation/XCLogParser", from: "0.2.32"),

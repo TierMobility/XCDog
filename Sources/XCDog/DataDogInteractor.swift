@@ -13,10 +13,20 @@ class DataDogInteractor {
         request.addValue(applicationKey, forHTTPHeaderField: "DD-APPLICATION-KEY")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let (data, _) = try await session.data(for: request)
+        guard let data = await session.dataTaskAsync(with: request) else { return }
         
         if let dataString = String(data: data, encoding: .utf8) {
             print("Response data: \(dataString)")
+        }
+    }
+}
+
+extension URLSession {
+    func dataTaskAsync(with request: URLRequest) async -> Data? {
+        await withCheckedContinuation { continuation in
+            dataTask(with: request) {(data, response, error) in
+                continuation.resume(returning: data)
+            }
         }
     }
 }
