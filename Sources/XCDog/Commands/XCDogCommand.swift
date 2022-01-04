@@ -46,7 +46,12 @@ struct XCDogCommand: ParsableCommand {
         let dataDogInteractor = DataDogInteractor()
         let semaphore = DispatchSemaphore(value: 0)
         Task {
-            try await dataDogInteractor.send(metrics: metrics, hostName: "", apiKey: apiKey, applicationKey: applicationKey)
+            let successful = try await dataDogInteractor.send(metrics: metrics, hostName: "", apiKey: apiKey, applicationKey: applicationKey)
+            
+            if !successful {
+                print("Couldn't upload logs!")
+            }
+            
             semaphore.signal()
         }
         semaphore.wait()
